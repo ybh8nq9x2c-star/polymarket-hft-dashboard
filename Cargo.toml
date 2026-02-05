@@ -1,0 +1,71 @@
+[package]
+name = "polymarket_arb_hft"
+version = "0.1.0"
+edition = "2021"
+authors = ["Agent Zero <agent@zero.ai>"]
+description = "Ultra-High-Frequency Polymarket Arbitrage Bot - Integer Programming + Bregman Projection + Q-Learning + MMBF + VWAP"
+license = "MIT"
+
+[dependencies]
+# Async Runtime - Zero-cost async I/O
+tokio = { version = "1.42", features = ["full", "tracing", "rt-multi-thread", "net", "io-util"] }
+tokio-tungstenite = { version = "0.26", features = ["connect"] }
+
+# HTTP/WebSocket - Zero-copy parsing where possible
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "gzip"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["raw_value"] }
+url = "2.5"
+
+# Numerical Computing - SIMD optimization
+ndarray = { version = "0.16", features = ["rayon", "blas", "approx", "serde"] }
+nalgebra = "0.33"
+
+# Machine Learning / Q-Learning
+rand = "0.8"
+rand_distr = "0.4"
+
+# Utilities - Zero-allocation logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Metrics & Monitoring
+prometheus = "0.13"
+metrics = "0.24"
+
+# Parallel Processing - Lock-free data structures
+rayon = "1.10"
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
+
+# Fast Hash Maps - FNV-1a hashing
+fxhash = "0.2"
+indexmap = { version = "2.7", features = ["rayon"] }
+
+# Bit manipulation for combinatorial optimization
+bitvec = "1.0"
+
+# SmallVec for stack allocation
+smallvec = "1.13"
+
+# API Server for Dashboard
+actix-web = "4"
+actix-cors = "0.6"
+actix-files = "0.6"
+actix-ws = "0.2"
+futures-util = "0.3"
+uuid = { version = "1", features = ["v4"] }
+env_logger = "0.10"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+debug = true

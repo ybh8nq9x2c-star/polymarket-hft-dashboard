@@ -1,0 +1,316 @@
+//! Reinforcement Learning module
+//!
+//! Implements Q-Learning for adaptive trading strategies
+//! Based on paper: "Advanced Statistical Arbitrage with Reinforcement Learning" (arXiv:2403.12180)
+//!
+//! Features:
+//! 1. Q-Learning with epsilon-greedy exploration
+//! 2. State space discretization based on price movements
+//! 3. Reward function tailored for arbitrage trading
+//! 4. Empirical Mean Reversion Time (EMRT) for spread construction
+
+use crate::types::*;
+use fxhash::FxHashMap;
+use rand::Rng;
+
+/// Q-Learning agent for adaptive trading
+pub struct QLearningAgent {
+    pub q_table: FxHashMap<QState, FxHashMap<QAction, f64>>,
+    pub learning_rate: f64,
+    pub discount_factor: f64,
+    pub exploration_rate: f64,
+    pub min_exploration: f64,
+    pub exploration_decay: f64,
+    pub episode: u64,
+    pub total_reward: f64,
+    pub step_count: u64,
+    pub avg_reward: f64,
+}
+
+impl QLearningAgent {
+    pub fn new(
+        learning_rate: f64,
+        discount_factor: f64,
+        exploration_rate: f64,
+        exploration_decay: f64,
+    ) -> Self {
+        Self {
+            q_table: FxHashMap::default(),
+            learning_rate,
+            discount_factor,
+            exploration_rate,
+            min_exploration: 0.01,
+            exploration_decay,
+            episode: 0,
+            total_reward: 0.0,
+            step_count: 0,
+            avg_reward: 0.0,
+        }
+    }
+
+    /// Get action using epsilon-greedy policy
+    pub fn get_action(&self, state: QState) -> QAction {
+        let mut rng = rand::thread_rng();
+        
+        // Exploration
+        if rng.gen::<f64>() < self.exploration_rate {
+            return self._random_action();
+        }
+        
+        // Exploitation: choose best action
+        if let Some(actions) = self.q_table.get(&state) {
+            let best = actions.iter()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap());
+            
+            if let Some((action, _)) = best {
+                return *action;
+            }
+        }
+        
+        // Default: random action
+        self._random_action()
+    }
+
+    /// Update Q-value using Bellman equation
+    pub fn update(&mut self, state: QState, action: QAction, reward: f64, next_state: QState) {
+        // Get current Q-value
+        let current_q = *self.q_table
+            .get(&state)
+            .and_then(|actions| actions.get(&action))
+            .unwrap_or(&0.0);
+        
+        // Get max Q-value for next state
+        let max_next_q = self.q_table
+            .get(&next_state)
+            .map(|actions| actions.values().cloned().fold(f64::NEG_INFINITY, f64::max))
+            .unwrap_or(0.0);
+        
+        // Q-Learning update rule
+        // Q(s,a) ← Q(s,a) + α[R + γ·max(Q(s',a')) - Q(s,a)]
+        let target = reward + self.discount_factor * max_next_q;
+        let new_q = current_q + self.learning_rate * (target - current_q);
+        
+        // Store updated Q-value
+        self.q_table
+            .entry(state)
+            .or_insert_with(FxHashMap::default)
+            .insert(action, new_q);
+        
+        // Update tracking
+        self.total_reward += reward;
+        self.step_count += 1;
+        self.avg_reward = self.total_reward / self.step_count as f64;
+    }
+
+    /// Decay exploration rate
+    pub fn decay_exploration(&mut self) {
+        self.exploration_rate = (self.exploration_rate - self.exploration_decay)
+            .max(self.min_exploration);
+        self.episode += 1;
+    }
+
+    /// Calculate reward for arbitrage trade
+    pub fn calculate_reward(
+        &self,
+        profit: f64,
+        investment: f64,
+        slippage: f64,
+        execution_time: f64,
+    ) -> f64 {
+        // Reward function from paper: R = profit - transaction_cost
+        let profit_reward = profit;
+        
+        // Penalty for slippage
+        let slippage_penalty = -slippage * investment * 10.0;
+        
+        // Penalty for slow execution
+        let time_penalty = -(execution_time / 1000.0).min(1.0) * investment * 0.01;
+        
+        // Normalize reward
+        profit_reward + slippage_penalty + time_penalty
+    }
+
+    fn _random_action(&self) -> QAction {
+        let mut rng = rand::thread_rng();
+        match rng.gen_range(0..3) {
+            0 => QAction::BuyYes,
+            1 => QAction::BuyNo,
+            _ => QAction::BuyBoth,
+        }
+    }
+}
+
+/// State for Q-Learning
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct QState {
+    pub price_trend: u8,      // -2, -1, 0, 1, 2 (mapped to 0-4)
+    pub arbitrage_available: u8,  // 0 or 1
+    pub z_score_bucket: u8,     // discretized z-score
+}
+
+/// Actions for Q-Learning
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub enum QAction {
+    BuyYes,   // Only buy YES
+    BuyNo,    // Only buy NO
+    BuyBoth,  // Buy both (arbitrage)
+}
+
+/// Empirical Mean Reversion Time calculator
+/// Based on paper: Advanced Statistical Arbitrage with RL (arXiv:2403.12180)
+pub struct EmrtCalculator {
+    pub window_size: usize,
+    pub threshold: f64,
+}
+
+impl EmrtCalculator {
+    pub fn new(window_size: usize, threshold: f64) -> Self {
+        Self { window_size, threshold }
+    }
+
+    /// Calculate Empirical Mean Reversion Time
+    pub fn calculate_emrt(&self, prices: &[f64]) -> f64 {
+        if prices.len() < self.window_size * 2 {
+            return f64::MAX;
+        }
+
+        let extremes = self._find_local_extremes(prices);
+        if extremes.len() < 2 {
+            return f64::MAX;
+        }
+
+        let mut reversion_times = Vec::new();
+        let sample_mean = self._calculate_mean(prices);
+        
+        // Find crossing times
+        let mut crossing_index = 0;
+        for (i, &extreme_idx) in extremes.iter().enumerate() {
+            if extreme_idx >= crossing_index {
+                // Find next crossing of mean
+                for j in extreme_idx..prices.len() {
+                    if (prices[j] - sample_mean).abs() < self.threshold {
+                        reversion_times.push(j - extreme_idx);
+                        crossing_index = j;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if reversion_times.is_empty() {
+            return f64::MAX;
+        }
+
+        // Average reversion time
+        let sum: f64 = reversion_times.iter().map(|&x| x as f64).sum();
+        (2.0 / reversion_times.len() as f64) * sum
+    }
+
+    fn _find_local_extremes(&self, prices: &[f64]) -> Vec<usize> {
+        let mut extremes = Vec::new();
+        let std = self._calculate_std(prices);
+        let c = 2.0; // Threshold constant
+
+        for i in self.window_size..prices.len() - self.window_size {
+            let is_max = prices[i..=i + self.window_size]
+                .iter()
+                .all(|&p| p <= prices[i] + c * std)
+                && prices[i - self.window_size..=i]
+                .iter()
+                .all(|&p| p <= prices[i] + c * std);
+            
+            let is_min = prices[i..=i + self.window_size]
+                .iter()
+                .all(|&p| p >= prices[i] - c * std)
+                && prices[i - self.window_size..=i]
+                .iter()
+                .all(|&p| p >= prices[i] - c * std);
+            
+            if is_max || is_min {
+                extremes.push(i);
+            }
+        }
+        extremes
+    }
+
+    fn _calculate_mean(&self, prices: &[f64]) -> f64 {
+        let sum: f64 = prices.iter().sum();
+        sum / prices.len() as f64
+    }
+
+    fn _calculate_std(&self, prices: &[f64]) -> f64 {
+        let mean = self._calculate_mean(prices);
+        let variance = prices.iter()
+            .map(|&p| (p - mean).powi(2))
+            .sum::<f64>() / prices.len() as f64;
+        variance.sqrt()
+    }
+}
+
+/// Spread constructor for statistical arbitrage
+pub struct SpreadConstructor {
+    pub emrt_calculator: EmrtCalculator,
+}
+
+impl SpreadConstructor {
+    pub fn new() -> Self {
+        Self {
+            emrt_calculator: EmrtCalculator::new(20, 0.01),
+        }
+    }
+
+    /// Find optimal coefficients to minimize EMRT
+    pub fn minimize_emrt(
+        &self,
+        asset1: &[f64],
+        asset2: &[f64],
+    ) -> (f64, f64) {
+        // Grid search for optimal coefficients
+            let mut best_a = None;
+            for i in -3i32..=3 {
+                let a = i as f64;
+                let spread: Vec<f64> = asset1.iter().zip(asset2.iter()).map(|(\&p1, \&p2)| a * p1 + p2).collect();
+                let emrt = self.emrt_calculator.calculate_emrt(\&spread);
+                let current = (emrt, a);
+                best_a = Some(best_a.map_or(current, |prev| if prev.0 < current.0 { prev } else { current }));
+            }
+            best_a.map(|(_, a)| a).unwrap_or(1.0)
+            let mut best_a = None;
+            for i in -3i32..=3 {
+                let a = i as f64;
+                    .map(|(&p1, &p2)| a * p1 + p2)
+                    .collect();
+                
+                let emrt = self.emrt_calculator.calculate_emrt(&spread);
+                (emrt, a)
+            })
+            .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
+            .map(|(_, a)| a)
+            .unwrap_or(1.0);
+
+        // For pairs trading, coefficients sum to 0
+        (best_a, -best_a)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_q_learning() {
+        let mut agent = QLearningAgent::new(0.1, 0.95, 0.1, 0.001);
+        
+        let state = QState {
+            price_trend: 0,
+            arbitrage_available: 1,
+            z_score_bucket: 1,
+        };
+        let next_state = state;
+        
+        let action = agent.get_action(state);
+        agent.update(state, action, 1.0, next_state);
+        
+        assert!(agent.q_table.contains_key(&state));
+    }
+}

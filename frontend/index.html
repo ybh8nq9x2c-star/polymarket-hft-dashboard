@@ -1,0 +1,871 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polymarket HFT Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0a0e17 0%, #1a1f2e 50%, #0f1419 100%);
+            color: #e0e6ed;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        header {
+            background: rgba(16, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-stopped {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .status-running {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-stopped .status-dot {
+            background: #ef4444;
+            animation: none;
+        }
+
+        .status-running .status-dot {
+            background: #22c55e;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        /* Stats Cards */
+        .stat-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            border-color: rgba(56, 189, 248, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 600;
+            color: #e0e6ed;
+        }
+
+        .stat-value.positive {
+            color: #22c55e;
+        }
+
+        .stat-value.negative {
+            color: #ef4444;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .stat-change.positive {
+            color: #22c55e;
+        }
+
+        .stat-change.negative {
+            color: #ef4444;
+        }
+
+        /* Chart Section */
+        .chart-section {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #e0e6ed;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        /* Trades Table */
+        .trades-section {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .trades-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .trades-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.1);
+        }
+
+        .trades-table td {
+            padding: 16px;
+            border-bottom: 1px solid rgba(56, 189, 248, 0.05);
+            font-size: 14px;
+        }
+
+        .trades-table tr:hover {
+            background: rgba(56, 189, 248, 0.05);
+        }
+
+        .trade-buy {
+            color: #22c55e;
+        }
+
+        .trade-sell {
+            color: #ef4444;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-secondary {
+            background: rgba(56, 189, 248, 0.2);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(56, 189, 248, 0.3);
+        }
+
+        /* Markets Grid */
+        .markets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .market-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .market-card:hover {
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .market-question {
+            font-size: 14px;
+            color: #e0e6ed;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .market-prices {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+
+        .price-yes {
+            color: #22c55e;
+        }
+
+        .price-no {
+            color: #ef4444;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #94a3b8;
+        }
+
+        /* Backtesting Section */
+        .backtesting-section {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .backtest-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .backtest-stat {
+            text-align: center;
+        }
+
+        .backtest-stat-label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+
+        .backtest-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 600;
+            color: #e0e6ed;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">⚡ Polymarket HFT Dashboard</div>
+                <div class="status-badge status-stopped" id="statusBadge">
+                    <span class="status-dot"></span>
+                    <span id="statusText">STOPPED</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Controls -->
+        <div class="controls">
+            <button class="btn-primary" id="startBtn" onclick="startBot()">▶ Avvia Bot</button>
+            <button class="btn-danger" id="stopBtn" onclick="stopBot()" disabled>⏹ Ferma Bot</button>
+            <button class="btn-secondary" onclick="clearTrades()">🗑️ Pulisci Trade</button>
+            <button class="btn-secondary" onclick="downloadTrades()">📥 Download CSV</button>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="dashboard-grid">
+            <div class="stat-card">
+                <div class="stat-label">Balance</div>
+                <div class="stat-value" id="balanceValue">$0.00</div>
+                <div class="stat-change" id="balanceChange"></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total PnL</div>
+                <div class="stat-value" id="pnlValue">$0.00</div>
+                <div class="stat-change" id="pnlChange"></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Win Rate</div>
+                <div class="stat-value" id="winRate">0.00%</div>
+                <div class="stat-change">Total Trades: <span id="totalTrades">0</span></div>
+            </div>
+        </div>
+
+        <!-- PnL Chart -->
+        <div class="chart-section">
+            <div class="section-title">📈 Equity Curve</div>
+            <div class="chart-container">
+                <canvas id="pnlChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Backtesting Stats -->
+        <div class="backtesting-section">
+            <div class="section-title">🎯 Backtesting Performance</div>
+            <div class="backtest-stats">
+                <div class="backtest-stat">
+                    <div class="backtest-stat-label">ROI</div>
+                    <div class="backtest-stat-value" id="roiValue">0.00%</div>
+                </div>
+                <div class="backtest-stat">
+                    <div class="backtest-stat-label">Profit Factor</div>
+                    <div class="backtest-stat-value" id="profitFactor">0.00</div>
+                </div>
+                <div class="backtest-stat">
+                    <div class="backtest-stat-label">Max Drawdown</div>
+                    <div class="backtest-stat-value" id="maxDrawdown">0.00%</div>
+                </div>
+                <div class="backtest-stat">
+                    <div class="backtest-stat-label">Sharpe Ratio</div>
+                    <div class="backtest-stat-value" id="sharpeRatio">0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trades Table -->
+        <div class="trades-section">
+            <div class="section-title">📋 Trade History (Simulati con Dati Reali)</div>
+            <table class="trades-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Market</th>
+                        <th>Action</th>
+                        <th>Price</th>
+                        <th>Quantity</th>
+                        <th>Amount</th>
+                        <th>Arb Profit</th>
+                        <th>PnL</th>
+                    </tr>
+                </thead>
+                <tbody id="tradesTableBody">
+                    <tr>
+                        <td colspan="8" class="loading">Loading trades...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Markets -->
+        <div class="chart-section">
+            <div class="section-title">🌐 Live Markets (Dati Reali Polymarket)</div>
+            <div class="markets-grid" id="marketsGrid">
+                <div class="loading">Loading markets...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        const API_BASE = window.location.origin + '/api';
+
+        // State
+        let botState = {
+            running: false,
+            balance: 0,
+            totalPnl: 0,
+            winRate: 0,
+            totalTrades: 0
+        };
+
+        let trades = [];
+        let markets = [];
+        let pnlChart = null;
+        let refreshInterval = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            loadBotStatus();
+            loadTrades();
+            loadMarkets();
+            startAutoRefresh();
+        });
+
+        // Initialize PnL Chart
+        function initChart() {
+            const ctx = document.getElementById('pnlChart').getContext('2d');
+            pnlChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Equity',
+                        data: [],
+                        borderColor: '#38bdf8',
+                        backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(56, 189, 248, 0.1)'
+                            },
+                            ticks: {
+                                color: '#94a3b8'
+                            }
+                        }
+                    },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    }
+                }
+            });
+        }
+
+        // API Functions
+        async function loadBotStatus() {
+            try {
+                alert("DEBUG: Chiamata API in corso...");
+            const response = await fetch(`${API_BASE}/status`);
+                const result = await response.json();
+            alert("DEBUG: Risposta API: " + JSON.stringify(result));
+                if (result.success) {
+                    updateStatus(result.data);
+                }
+            } catch (error) {
+                console.error('Error loading bot status:', error);
+            }
+        }
+
+        async function loadTrades() {
+            try {
+                alert("DEBUG: Chiamata API in corso...");
+            const response = await fetch(`${API_BASE}/trades`);
+                const result = await response.json();
+            alert("DEBUG: Risposta API: " + JSON.stringify(result));
+                if (result.success) {
+                    trades = result.data;
+                    updateTradesTable();
+                    updateChart();
+                    updateBacktestingStats();
+                }
+            } catch (error) {
+                console.error('Error loading trades:', error);
+            }
+        }
+
+        async function loadMarkets() {
+            try {
+                alert("DEBUG: Chiamata API in corso...");
+            const response = await fetch(`${API_BASE}/markets`);
+                const result = await response.json();
+            alert("DEBUG: Risposta API: " + JSON.stringify(result));
+                if (result.success) {
+                    markets = result.data;
+                    updateMarketsGrid();
+                }
+            } catch (error) {
+                console.error('Error loading markets:', error);
+            }
+        }
+
+        async function startBot() {
+            alert("DEBUG: StartBot chiamato!");
+            try {
+                alert("DEBUG: Chiamata API in corso...");
+            const response = await fetch(`${API_BASE}/control`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'start',
+                        initial_balance: 10000,
+                        trade_frequency: 30
+                    })
+                });
+                const result = await response.json();
+            alert("DEBUG: Risposta API: " + JSON.stringify(result));
+                if (result.success) {
+                    updateStatus({ running: true });
+                    startAutoRefresh();
+                } else {
+                    alert('Error starting bot: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error starting bot:', error);
+                alert('Error starting bot');
+            }
+        }
+
+        async function stopBot() {
+            try {
+                alert("DEBUG: Chiamata API in corso...");
+            const response = await fetch(`${API_BASE}/control`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'stop' })
+                });
+                const result = await response.json();
+            alert("DEBUG: Risposta API: " + JSON.stringify(result));
+                if (result.success) {
+                    updateStatus({ running: false });
+                }
+            } catch (error) {
+                console.error('Error stopping bot:', error);
+            }
+        }
+
+        async function clearTrades() {
+            if (!confirm('Are you sure you want to clear all trades?')) return;
+
+            try {
+                alert("DEBUG: Chiamata API in corso...");
+            const response = await fetch(`${API_BASE}/trades/clear`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+            alert("DEBUG: Risposta API: " + JSON.stringify(result));
+                if (result.success) {
+                    trades = [];
+                    updateTradesTable();
+                    updateChart();
+                    loadBotStatus();
+                }
+            } catch (error) {
+                console.error('Error clearing trades:', error);
+            }
+        }
+
+        // Update Functions
+        function updateStatus(state) {
+            botState = { ...botState, ...state };
+
+            const statusBadge = document.getElementById('statusBadge');
+            const statusText = document.getElementById('statusText');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+
+            if (state.running) {
+                statusBadge.className = 'status-badge status-running';
+                statusText.textContent = 'RUNNING';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                statusBadge.className = 'status-badge status-stopped';
+                statusText.textContent = 'STOPPED';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+
+            // Update stats
+            document.getElementById('balanceValue').textContent = formatCurrency(state.balance);
+            document.getElementById('pnlValue').textContent = formatCurrency(state.total_pnl);
+            document.getElementById('winRate').textContent = state.win_rate.toFixed(2) + '%';
+            document.getElementById('totalTrades').textContent = state.totalTrades;
+
+            // Color coding
+            const pnlValue = document.getElementById('pnlValue');
+            pnlValue.className = 'stat-value ' + (state.total_pnl >= 0 ? 'positive' : 'negative');
+
+            const balanceChange = document.getElementById('balanceChange');
+            const roi = ((state.balance - state.initial_balance) / state.initial_balance * 100).toFixed(2);
+            balanceChange.textContent = `ROI: ${roi}%`;
+            balanceChange.className = 'stat-change ' + (roi >= 0 ? 'positive' : 'negative');
+        }
+
+        function updateTradesTable() {
+            const tbody = document.getElementById('tradesTableBody');
+
+            if (trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="loading">No trades yet. Start the bot to see simulated trades with real market data.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = trades.map(trade => `
+                <tr>
+                    <td>${formatDateTime(trade.timestamp)}</td>
+                    <td title="${trade.question}">${trade.question.substring(0, 30)}...</td>
+                    <td class="${trade.action.includes('BUY') ? 'trade-buy' : 'trade-sell'}">${trade.action}</td>
+                    <td>${trade.price.toFixed(4)}</td>
+                    <td>${trade.quantity.toFixed(4)}</td>
+                    <td>${formatCurrency(trade.amount)}</td>
+                    <td class="${trade.arbitrage_profit > 0 ? 'positive' : ''}">${trade.arbitrage_profit.toFixed(2)}</td>
+                    <td class="${trade.pnl > 0 ? 'positive' : 'negative'}">${formatCurrency(trade.pnl)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateChart() {
+            if (!pnlChart || trades.length === 0) return;
+
+            // Calculate equity curve
+            let equity = 10000; // Initial balance
+            const equityCurve = trades.map((trade, index) => {
+                equity += trade.pnl + trade.arbitrage_profit;
+                return equity;
+            });
+
+            pnlChart.data.labels = trades.map((_, i) => i + 1);
+            pnlChart.data.datasets[0].data = equityCurve;
+            pnlChart.update('none');
+        }
+
+        function updateMarketsGrid() {
+            const grid = document.getElementById('marketsGrid');
+
+            if (markets.length === 0) {
+                grid.innerHTML = '<div class="loading">No markets available</div>';
+                return;
+            }
+
+            grid.innerHTML = markets.slice(0, 12).map(market => `
+                <div class="market-card">
+                    <div class="market-question">${market.question}</div>
+                    <div class="market-prices">
+                        <span class="price-yes">YES: ${market.yes_price.toFixed(4)}</span>
+                        <span class="price-no">NO: ${market.no_price.toFixed(4)}</span>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
+                        Liquidity: ${formatCurrency(market.yes_liquidity)} | Vol: ${formatCurrency(market.volume_24h)}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateBacktestingStats() {
+            if (trades.length === 0) {
+                document.getElementById('roiValue').textContent = '0.00%';
+                document.getElementById('profitFactor').textContent = '0.00';
+                document.getElementById('maxDrawdown').textContent = '0.00%';
+                document.getElementById('sharpeRatio').textContent = '0.00';
+                return;
+            }
+
+            // Calculate backtesting stats
+            const totalPnl = trades.reduce((sum, t) => sum + t.pnl + t.arbitrage_profit, 0);
+            const initialBalance = 10000;
+            const roi = (totalPnl / initialBalance * 100).toFixed(2);
+
+            const profitableTrades = trades.filter(t => t.pnl + t.arbitrage_profit > 0);
+            const losingTrades = trades.filter(t => t.pnl + t.arbitrage_profit <= 0);
+
+            const totalProfit = profitableTrades.reduce((sum, t) => sum + t.pnl + t.arbitrage_profit, 0);
+            const totalLoss = Math.abs(losingTrades.reduce((sum, t) => sum + t.pnl + t.arbitrage_profit, 0));
+            const profitFactor = totalLoss > 0 ? (totalProfit / totalLoss).toFixed(2) : '∞';
+
+            // Calculate max drawdown
+            let equity = initialBalance;
+            let peak = initialBalance;
+            let maxDrawdown = 0;
+            trades.forEach(t => {
+                equity += t.pnl + t.arbitrage_profit;
+                if (equity > peak) peak = equity;
+                const drawdown = (peak - equity) / peak * 100;
+                if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+            });
+
+            // Calculate Sharpe Ratio (simplified)
+            const avgReturn = totalPnl / trades.length;
+            const returns = trades.map(t => t.pnl + t.arbitrage_profit);
+            const stdDev = Math.sqrt(returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / trades.length);
+            const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev * Math.sqrt(252)).toFixed(2) : '0.00';
+
+            document.getElementById('roiValue').textContent = roi + '%';
+            document.getElementById('profitFactor').textContent = profitFactor;
+            document.getElementById('maxDrawdown').textContent = maxDrawdown.toFixed(2) + '%';
+            document.getElementById('sharpeRatio').textContent = sharpeRatio;
+        }
+
+        // Utility Functions
+        function formatCurrency(value) {
+            return '$' + value.toFixed(2);
+        }
+
+        function formatDateTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function downloadTrades() {
+            if (trades.length === 0) {
+                alert('No trades to download');
+                return;
+            }
+
+            const csv = [
+                ['Timestamp', 'Market ID', 'Question', 'Action', 'Price', 'Quantity', 'Amount', 'Arb Profit', 'PnL'],
+                ...trades.map(t => [
+                    t.timestamp,
+                    t.market_id,
+                    `"${t.question}"`,
+                    t.action,
+                    t.price.toFixed(4),
+                    t.quantity.toFixed(4),
+                    t.amount.toFixed(2),
+                    t.arbitrage_profit.toFixed(2),
+                    t.pnl.toFixed(2)
+                ])
+            ].map(row => row.join(',')).join('
+');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `trades_${new Date().toISOString()}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Auto Refresh
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                loadBotStatus();
+                loadTrades();
+                loadMarkets();
+            }, 5000); // Refresh every 5 seconds
+        }
+    </script>
+</body>
+</html>
