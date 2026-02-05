@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/
 WORKDIR /app
 
 COPY --from=builder /app/target/release/polymarket_arb_hft /app/
-COPY --from=builder /app/target/release/*.so /app/ 2>/dev/null || true
 
 COPY --chown=appuser:appuser frontend/ /app/frontend/
 RUN chown -R appuser:appuser /app
