@@ -66,7 +66,7 @@ impl HftArbitrageBot {
             executor: TradeExecutor::new(config.clone()),
             mev_extractor: if config.enable_mev { MevDetector::new(1000) } else { MevDetector::new(0) },
             market_manager: MarketManager::new(1000.0, 50),
-            risk_manager: RiskManager::new(50.0, 5, 0.15, 0.10, 0.20, 10),
+            risk_manager: RiskManager::new(50.0, 10, 0.15, 0.10, 0.20, 10),
             position_sizer: PositionSizer::new(0.25, 0.05, 10.0),
             polymarket_api: if config.use_real_data {
                 Some(PolymarketApiClient::new(
